@@ -344,7 +344,7 @@ cython.declare(possible_unicode_identifier=object, possible_bytes_identifier=obj
                replace_identifier=object, find_alphanums=object)
 possible_unicode_identifier = re.compile(ur"(?![0-9])\w+$", re.U).match
 possible_bytes_identifier = re.compile(r"(?![0-9])\w+$".encode('ASCII')).match
-replace_identifier = re.compile(r'[^a-zA-Z0-9_]+').sub
+replace_identifier = re.compile(r'[^a-zA-Z0-9_]+').subn
 find_alphanums = re.compile('([a-zA-Z0-9]+)').findall
 
 class StringConst(object):
@@ -707,10 +707,47 @@ class GlobalState(object):
         cname = cname.replace('-', 'neg_').replace('.','_')
         return cname
 
-    def new_const_cname(self, prefix='', value=''):
+    def new_const_cname(self, prefix='', value='', limit=32):
+        from hashlib import md5
+        from base64 import b64encode
         if hasattr(value, 'decode'):
             value = value.decode('ASCII', 'ignore')
-        value = replace_identifier('_', value)[:32].strip('_')
+        orig_value = value
+        need_hash = False
+
+        def repl(m):
+            chars = []
+            for c in m.group():
+                chars.append(short_unicode_name(c))
+            if chars:
+                result = '_'.join(chars)
+                if m.start() > 0:
+                    result = '_' + result
+                if m.end() < len(value):
+                    result = result + '_'
+                return result
+            return '_'
+
+        if len(value) > limit:
+            need_hash = True
+
+        value, n = replace_identifier(repl, value[:limit])
+        if len(value) >= limit:
+            need_hash = True
+        if n:
+            value = '_' + value[:limit - 1]
+
+        if need_hash:
+            digest = b64encode(md5(orig_value).digest()).replace('+', '=').replace('/', '=').replace('=', '')
+            length = len(digest)
+
+            for length in xrange(4, len(digest)):
+                if (value + '_' + digest[:length]) not in self.const_cname_counters:      
+                    value = value[:limit - length - 1] + '_' + digest[:length]
+                    break
+            else:
+                value = value[:limit - 1 - len(digest)] + '_' + digest
+
         c = self.const_cname_counters
         c[value] = c.setdefault(value, 0) + 1
         if c[value] == 1:
@@ -920,6 +957,27 @@ class GlobalState(object):
         if utility_code not in self.utility_codes:
             self.utility_codes.add(utility_code)
             utility_code.put_code(self)
+
+
+def short_unicode_name(char, shortcut={'SPACE': 'SP',
+                                       'HYPHEN-MINUS': 'HYPHEN',
+                                       'PERCENT': 'PCNT'}):
+    import unicodedata
+    name = unicodedata.name(char, '').replace(' SIGN', '')
+    if name:
+        name = shortcut.get(name, name)
+        name = name.replace('-', ' ')
+        if ' ' in name:
+            # "LEFT PARENTHESIS" => "LP"
+            name = ''.join(word[:1] for word in name.split(' '))
+        name, _ = replace_identifier('_', name)
+    else:
+        name = repr(char).lstrip('u').strip("'").strip('"').lstrip('\\')
+        if name:
+            name, _ = replace_identifier('_', name)
+        else:
+            name = '_'
+    return name
 
 
 def funccontext_property(name):
