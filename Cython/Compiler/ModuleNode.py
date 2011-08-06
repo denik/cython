@@ -3,7 +3,6 @@
 #
 
 import cython
-from cython import set
 cython.declare(Naming=object, Options=object, PyrexTypes=object, TypeSlots=object,
                error=object, warning=object, py_object_type=object, UtilityCode=object,
                EncodedString=object)
@@ -484,6 +483,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln('#include "%s"' % filename)
         code.putln("#ifndef Py_PYTHON_H")
         code.putln("    #error Python headers needed to compile C extensions, please install development version of Python.")
+        code.putln("#elif PY_VERSION_HEX < 0x02040000")
+        code.putln("    #error Cython requires Python 2.4+.")
         code.putln("#else")
         code.globalstate["end"].putln("#endif /* Py_PYTHON_H */")
 
@@ -514,12 +515,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
 #ifndef PY_LONG_LONG
   #define PY_LONG_LONG LONG_LONG
-#endif
-
-#if PY_VERSION_HEX < 0x02040000
-  #define METH_COEXIST 0
-  #define PyDict_CheckExact(op) (Py_TYPE(op) == &PyDict_Type)
-  #define PyDict_Contains(d,o)   PySequence_Contains(d,o)
 #endif
 
 #if PY_VERSION_HEX < 0x02050000

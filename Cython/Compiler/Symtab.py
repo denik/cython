@@ -15,11 +15,6 @@ from TypeSlots import \
     get_special_method_signature, get_property_accessor_signature
 import Code
 import __builtin__ as builtins
-try:
-    set
-except NameError:
-    from sets import Set as set
-import copy
 
 possible_identifier = re.compile(ur"(?![0-9])\w+$", re.U).match
 nice_identifier = re.compile('^[a-zA-Z0-0_]+$').match
@@ -127,6 +122,7 @@ class Entry(object):
     #                             Currently only supported for CythonScope entries.
     # error_on_uninitialized      Have Control Flow issue an error when this entry is
     #                             used uninitialized
+    # cf_used          boolean    Entry is used
 
     inline_func_in_pxd = False
     borrowed = 0
@@ -182,6 +178,7 @@ class Entry(object):
     in_with_gil_block = 0
     from_cython_utility_code = None
     error_on_uninitialized = False
+    cf_used = True
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
