@@ -9,6 +9,11 @@ cython.declare(re=object, Naming=object, Options=object, StringEncoding=object,
                DebugFlags=object, none_or_sub=object, basestring=object)
 
 import re
+import sys
+if sys.version_info[:2] >= (2, 5):
+    from hashlib import md5
+else:
+    from md5 import md5
 import Naming
 import Options
 import StringEncoding
@@ -708,12 +713,14 @@ class GlobalState(object):
         return cname
 
     def new_const_cname(self, prefix='', value='', limit=32):
-        from hashlib import md5
-        from base64 import b64encode
         if hasattr(value, 'decode'):
             value = value.decode('ASCII', 'ignore')
         orig_value = value
-        need_hash = False
+
+        if len(value) > limit:
+            need_hash = True
+        else:
+            need_hash = False
 
         def repl(m):
             chars = []
@@ -728,25 +735,15 @@ class GlobalState(object):
                 return result
             return '_'
 
+        value, n = replace_identifier(repl, value[:limit])
         if len(value) > limit:
             need_hash = True
-
-        value, n = replace_identifier(repl, value[:limit])
-        if len(value) >= limit:
-            need_hash = True
+            value = value[:limit]
         if n:
-            value = '_' + value[:limit - 1]
+            value = '_' + value
 
         if need_hash:
-            digest = b64encode(md5(orig_value).digest()).replace('+', '=').replace('/', '=').replace('=', '')
-            length = len(digest)
-
-            for length in xrange(4, len(digest)):
-                if (value + '_' + digest[:length]) not in self.const_cname_counters:      
-                    value = value[:limit - length - 1] + '_' + digest[:length]
-                    break
-            else:
-                value = value[:limit - 1 - len(digest)] + '_' + digest
+            value = value + '_' + md5(orig_value).hexdigest()[:4]
 
         c = self.const_cname_counters
         c[value] = c.setdefault(value, 0) + 1
